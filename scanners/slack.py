@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import os
 import urllib.request
+import urllib.parse
+import uuid
 from typing import Iterable, Optional
 
 from .config import CHANNELS, INDEX_ETFS
@@ -36,3 +38,54 @@ def post(channel_id: str, text: str, token: Optional[str] = None) -> dict:
                  "Authorization": f"Bearer {token}"}, method="POST")
     with urllib.request.urlopen(req, timeout=20) as resp:
         return json.loads(resp.read().decode())
+
+
+def upload_image(channel_id: str, image_path: str, comment: str,
+                 token: Optional[str] = None) -> dict:
+    """Upload a PNG to a channel via Slack's 3-step external-upload flow."""
+    token = token or os.environ.get("SLACK_BOT_TOKEN")
+    if not token:
+        raise RuntimeError("SLACK_BOT_TOKEN not set")
+    auth = {"Authorization": f"Bearer {token}"}
+    with open(image_path, "rb") as fh:
+        data = fh.read()
+    name = os.path.basename(image_path)
+
+    # 1) reserve an upload URL
+    p = urllib.parse.urlencode({"filename": name, "length": len(data)}).encode()
+    r = json.loads(urllib.request.urlopen(urllib.request.Request(
+        "https://slack.com/api/files.getUploadURLExternal", data=p,
+        headers={**auth, "Content-Type": "application/x-www-form-urlencoded"},
+        method="POST"), timeout=20).read())
+    if not r.get("ok"):
+        raise RuntimeError(f"getUploadURL failed: {r.get('error')}")
+    upload_url, file_id = r["upload_url"], r["file_id"]
+
+    # 2) POST the bytes (multipart)
+    b = "----bt" + uuid.uuid4().hex
+    body = (f'--{b}\r\nContent-Disposition: form-data; name="file"; '
+            f'filename="{name}"\r\nContent-Type: image/png\r\n\r\n').encode() \
+        + data + f"\r\n--{b}--\r\n".encode()
+    urllib.request.urlopen(urllib.request.Request(
+        upload_url, data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={b}"},
+        method="POST"), timeout=40).read()
+
+    # 3) complete -> shares into the channel with the caption
+    comp = json.dumps({"files": [{"id": file_id, "title": name}],
+                      "channel_id": channel_id, "initial_comment": comment}).encode()
+    return json.loads(urllib.request.urlopen(urllib.request.Request(
+        "https://slack.com/api/files.completeUploadExternal", data=comp,
+        headers={**auth, "Content-Type": "application/json; charset=utf-8"},
+        method="POST"), timeout=20).read())
+
+
+def post_signal(channel_id: str, text: str, chart_path: Optional[str] = None,
+                token: Optional[str] = None) -> dict:
+    """Post a signal with its chart if available, else fall back to text."""
+    if chart_path and os.path.exists(chart_path):
+        try:
+            return upload_image(channel_id, chart_path, text, token)
+        except Exception:
+            pass  # network / matplotlib / scope issue -> degrade to text
+    return post(channel_id, text, token)

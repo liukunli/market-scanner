@@ -11,7 +11,20 @@ CHANNELS = {
     "sp500": "C0BF2TKPNJF",         # #signals-sp500       (S&P 500 constituents)
     "other_5b": "C0BF95NT1R8",      # #signals-other-5b    (other US > $5B)
     "premarket_rollup": "C0BF94H8Y90",  # #alerts-premarket-gap (pre-market summary)
+    # 1-hour momentum signals route by DIRECTION:
+    "hourly_up": "C0BF5R1ARJ9",     # #one-hour-signals-up   (scan-up / BUY)
+    "hourly_down": "C0BF9531XFU",   # #one-hour-signals-down (scan-down / SHORT)
 }
+
+# Tier tag shown on each hourly line (focus: index ETF > QQQ > S&P 500 > other).
+def tier_tag(symbol: str, qqq, sp500) -> str:
+    if symbol in INDEX_ETFS:
+        return "ETF"
+    if symbol in set(qqq):
+        return "QQQ"
+    if symbol in set(sp500):
+        return "SPX"
+    return "5B"
 
 
 @dataclass(frozen=True)

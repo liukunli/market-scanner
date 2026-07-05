@@ -1,0 +1,5 @@
+# Core scanner + Slack posting use only the Python standard library.
+# matplotlib is needed ONLY to render candlestick charts (scanners/visualize.py
+# and the chart attached to each hourly Slack signal). Without it, hourly
+# signals still post as text — chart rendering is skipped gracefully.
+matplotlib>=3.6
