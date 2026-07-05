@@ -1,0 +1,13 @@
+# scanner runtime
+scanners/.cache/
+__pycache__/
+*.pyc
+
+# secrets
+.slack_env
+.env
+
+# tooling
+.pytest_cache/
+.venv/
+venv/
