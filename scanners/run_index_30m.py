@@ -57,7 +57,7 @@ def run(post_signal=slack.post_signal) -> dict:
         print("[skip] no live session today")
         return {"skipped": True}
 
-    channel = CHANNELS["index_etf"]
+    channel = CHANNELS["index_options"]
     outdir = tempfile.mkdtemp(prefix="index30_")
     counts = {"up": 0, "down": 0}
     for sym in INDEX_ETFS:

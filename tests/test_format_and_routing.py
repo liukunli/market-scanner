@@ -37,9 +37,9 @@ def test_format_hourly_content():
 
 # ---- channel routing (priority: ETF > QQQ > S&P 500 > other) -------------------
 
-def test_route_index_etf():
-    assert route_channel("QQQ", ["AAPL"], ["AAPL"]) == CHANNELS["index_etf"]
-    assert route_channel("IWM", [], []) == CHANNELS["index_etf"]
+def test_route_index_options():
+    assert route_channel("QQQ", ["AAPL"], ["AAPL"]) == CHANNELS["index_options"]
+    assert route_channel("IWM", [], []) == CHANNELS["index_options"]
 
 
 def test_route_qqq_before_sp500():

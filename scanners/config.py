@@ -7,13 +7,14 @@ DISPLAY_TZ = "America/Los_Angeles"
 # --- Index ETFs treated as their own focus tier ---------------------------------
 INDEX_ETFS = ("QQQ", "SPY", "IWM")
 
-# --- Slack channel IDs (created in the "trading" workspace) ---------------------
+# --- Slack channel IDs (active channels in the "trading" workspace) -------------
 CHANNELS = {
-    "index_etf": "C0BF2TKURLK",     # #signals-index-etf   (QQQ / SPY / IWM ETF signals)
+    # index 30-min signals with option targets (QQQ / SPY / IWM):
+    "index_options": "C0BF99KNPEW",  # #options-qqq-spy-iwm
+    # pre-market gap tiers:
     "qqq": "C0BETQ3FV3R",           # #signals-qqq         (Nasdaq-100 constituents)
     "sp500": "C0BF2TKPNJF",         # #signals-sp500       (S&P 500 constituents)
     "other_5b": "C0BF95NT1R8",      # #signals-other-5b    (other US > $5B)
-    "premarket_rollup": "C0BF94H8Y90",  # #alerts-premarket-gap (pre-market summary)
     # 1-hour momentum signals route by DIRECTION:
     "hourly_up": "C0BF5R1ARJ9",     # #one-hour-signals-up   (scan-up / BUY)
     "hourly_down": "C0BF9531XFU",   # #one-hour-signals-down (scan-down / SHORT)

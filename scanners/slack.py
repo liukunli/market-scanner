@@ -18,7 +18,7 @@ from .config import CHANNELS, INDEX_ETFS
 def route_channel(symbol: str, qqq: Iterable[str], sp500: Iterable[str]) -> str:
     """Return the channel ID a symbol's signal should post to."""
     if symbol in INDEX_ETFS:
-        return CHANNELS["index_etf"]
+        return CHANNELS["index_options"]
     if symbol in set(qqq):
         return CHANNELS["qqq"]
     if symbol in set(sp500):
