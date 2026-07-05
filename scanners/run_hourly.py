@@ -15,7 +15,7 @@ import tempfile
 import time
 
 from . import universe, yahoo, slack
-from .config import (CHANNELS, INDEX_ETFS, HOURLY, tier_tag,
+from .config import (CHANNELS, HOURLY, tier_tag,
                      MAX_SIGNALS_PER_DIRECTION, POST_THROTTLE_SECONDS)
 from .hourly import scan_up, scan_down
 from .signal_export import build_record
@@ -58,7 +58,8 @@ def run(post_signal=slack.post_signal) -> dict:
 
     qqq = universe.qqq_constituents(now)
     sp500 = universe.sp500_constituents(now)
-    symbols = list(dict.fromkeys(list(INDEX_ETFS) + universe.us_5b_universe(now)))
+    # index ETFs are covered by the 30-min scan (run_index_30m); stocks only here
+    symbols = universe.us_5b_universe(now)
     bars_by = yahoo.fetch_all(symbols, yahoo.hourly_bars)
 
     # collect signals per direction, then rank + cap to control noise / rate limits

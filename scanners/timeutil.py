@@ -29,3 +29,9 @@ def et_stamp(ts: int) -> str:
 
 def today_et(now: float) -> str:
     return datetime.datetime.fromtimestamp(now, ET).strftime("%Y-%m-%d")
+
+
+def utc_date(ts: int) -> str:
+    """UTC calendar date. Option expiration timestamps are midnight UTC, so ET
+    conversion would shift them a day earlier — use this for expiries."""
+    return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime("%Y-%m-%d")

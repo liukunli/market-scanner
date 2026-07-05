@@ -52,19 +52,38 @@ Channel IDs are set in `scanners/config.py`.
 ## Run
 
 ```bash
-export SLACK_BOT_TOKEN="xoxb-..."      # bot token with chat:write, joined to the channels
-python3 -m scanners.run_premarket      # ~9:00 AM ET
-python3 -m scanners.run_hourly         # each bar close, 09:30–16:00 ET
+export SLACK_BOT_TOKEN="xoxb-..."      # bot token with chat:write + files:write, joined to channels
+python3 -m scanners.run_premarket      # once at open  — gap scan (QQQ / S&P500 / >$5B)
+python3 -m scanners.run_hourly         # every hour    — stocks >$5B, 2-bar momentum, up/down
+python3 -m scanners.run_index_30m      # every 30 min  — QQQ/SPY/IWM, long+short, option targets
 ```
+
+All three self-guard: if today has no live session (weekend/holiday), they skip
+and post nothing.
+
+### Index 30-min scan + option targets
+
+QQQ/SPY/IWM run on **30-minute** bars with the same 2-bar mechanism, both
+directions. The take-profit is expressed as an **option struck at the target**:
+scan-up → buy a CALL at the target price, scan-down → buy a PUT. The scanner
+posts the nearest-strike front-expiry contract and its premium (degrades to an
+approximate strike if the live chain is unavailable).
 
 ## Test
 
 ```bash
-python3 -m pytest tests/ -q            # 30 tests, fully mocked, no network
+python3 -m pytest tests/ -q            # 49 tests, fully mocked, no network
 ```
 
-## Scheduling
+## Scheduling (Claude routine, cron in UTC)
 
-A Claude cloud routine runs the entrypoints on a cron. Times are UTC; for EDT
-(summer): pre-market `0 13 * * 1-5`, hourly `30 14-19 * * 1-5` + `0 20 * * 1-5`.
-Shift crons back 1 hour for EST (winter).
+Cadence: pre-market **once at open**, stocks **hourly**, index **every 30 min**.
+Cloud cron minimum interval is 1 hour, so sub-hour/half-hour cadences use two
+offset routines. For EDT (summer); shift back 1 hour for EST (winter):
+
+| Routine | cron (UTC) | fires (ET) |
+|---------|-----------|-----------|
+| pre-market | `0 13 * * 1-5` | 9:00 |
+| hourly (stocks) | `30 14-19 * * 1-5` + `0 20 * * 1-5` | 10:30–16:00 |
+| index 30m (A) | `0 14-19 * * 1-5` | 10:00–15:00 |
+| index 30m (B) | `30 13-19 * * 1-5` | 9:30–15:30 |

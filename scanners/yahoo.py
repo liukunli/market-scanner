@@ -60,19 +60,33 @@ def latest_session_date(probe: str = "SPY") -> Optional[str]:
     return et_date(rmt) if rmt else None
 
 
-def hourly_bars(symbol: str, lookback: str = "1mo") -> list[Bar]:
-    """Completed 1-hour bars (drops null and zero-volume close-snapshot bars)."""
-    res = _chart(symbol, f"interval=1h&range={lookback}")
+def bars(symbol: str, interval: str = "1h", lookback: str = "1mo") -> list[Bar]:
+    """Completed intraday bars at `interval` (e.g. '1h', '30m').
+
+    Drops null bars and zero-volume close-snapshot bars. The signal engine is
+    timeframe-agnostic, so the same scan runs on any interval.
+    """
+    res = _chart(symbol, f"interval={interval}&range={lookback}")
     if not res:
         return []
     ts = res.get("timestamp") or []
     q = res["indicators"]["quote"][0]
-    bars = []
+    out = []
     for t, o, h, l, c, v in zip(ts, q["open"], q["high"], q["low"], q["close"], q["volume"]):
         if None in (o, h, l, c) or not v:
             continue
-        bars.append(Bar(ts=t, open=o, high=h, low=l, close=c, volume=v))
-    return bars
+        out.append(Bar(ts=t, open=o, high=h, low=l, close=c, volume=v))
+    return out
+
+
+def hourly_bars(symbol: str, lookback: str = "1mo") -> list[Bar]:
+    """Completed 1-hour bars."""
+    return bars(symbol, "1h", lookback)
+
+
+def half_hour_bars(symbol: str, lookback: str = "1mo") -> list[Bar]:
+    """Completed 30-minute bars."""
+    return bars(symbol, "30m", lookback)
 
 
 def premarket_quote(symbol: str) -> Optional[tuple[float, float, float]]:
@@ -102,6 +116,51 @@ def premarket_quote(symbol: str) -> Optional[tuple[float, float, float]]:
     if price is None:
         return None
     return float(prev_close), float(price), float(pm_vol)
+
+
+_session = None  # (opener, crumb) cached for option-chain calls
+
+
+def _crumb_session():
+    global _session
+    if _session is not None:
+        return _session
+    import http.cookiejar
+    import urllib.parse  # noqa: F401 (used by callers)
+    cj = http.cookiejar.CookieJar()
+    op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+    op.addheaders = [("User-Agent", _UA["User-Agent"])]
+    for url in ("https://fc.yahoo.com", "https://finance.yahoo.com"):
+        try:
+            op.open(url, timeout=10).read()
+        except Exception:
+            pass
+    crumb = op.open("https://query2.finance.yahoo.com/v1/test/getcrumb", timeout=10).read().decode()
+    _session = (op, crumb)
+    return _session
+
+
+def option_chain(symbol: str, expiry: Optional[int] = None) -> Optional[dict]:
+    """Front (or given-expiry) option chain for `symbol`, or None on failure.
+
+    Needs a crumb+cookie session; returns None if that can't be established
+    (callers degrade gracefully to an approximate contract)."""
+    import urllib.parse
+    for attempt in range(2):
+        try:
+            op, crumb = _crumb_session()
+            url = (f"https://query2.finance.yahoo.com/v7/finance/options/{symbol}"
+                   f"?crumb={urllib.parse.quote(crumb)}")
+            if expiry:
+                url += f"&date={expiry}"
+            d = json.loads(op.open(url, timeout=15).read())
+            res = d["optionChain"]["result"]
+            return res[0] if res else None
+        except Exception:
+            global _session
+            _session = None            # force a fresh crumb next attempt
+            time.sleep(0.5)
+    return None
 
 
 def fetch_all(symbols, fn: Callable[[str], object], max_workers: int = 25) -> dict:
