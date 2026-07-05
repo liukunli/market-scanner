@@ -4,6 +4,11 @@ from dataclasses import dataclass
 # Timezone used for all displayed timestamps (auto-handles PST/PDT via zoneinfo).
 DISPLAY_TZ = "America/Los_Angeles"
 
+# Slack bot token fallback. The SLACK_BOT_TOKEN env var takes precedence (see
+# slack.py); this hardcoded value is used only when the env var is unset.
+# NOTE: committed secret — treat as public and rotate if leaked.
+SLACK_BOT_TOKEN = "xoxb-11547443072976-11512889034259-uOAAdZfzpnmRt5rM2JCzu8RR"
+
 # --- Index ETFs treated as their own focus tier ---------------------------------
 INDEX_ETFS = ("QQQ", "SPY", "IWM")
 

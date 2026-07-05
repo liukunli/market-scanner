@@ -1,7 +1,8 @@
 """Slack posting + channel routing.
 
-Reads the bot token from SLACK_BOT_TOKEN (never hard-coded). Routing sends each
-symbol to its highest-priority focus tier: index ETF > QQQ > S&P 500 > other.
+Token resolution: SLACK_BOT_TOKEN env var wins; otherwise falls back to the
+committed config.SLACK_BOT_TOKEN. Routing sends each symbol to its
+highest-priority focus tier: index ETF > QQQ > S&P 500 > other.
 """
 from __future__ import annotations
 
@@ -13,6 +14,12 @@ import uuid
 from typing import Iterable, Optional
 
 from .config import CHANNELS, INDEX_ETFS
+from . import config as _config
+
+
+def _resolve_token(token: Optional[str]) -> Optional[str]:
+    """Env var wins; fall back to the committed config token."""
+    return token or os.environ.get("SLACK_BOT_TOKEN") or getattr(_config, "SLACK_BOT_TOKEN", None)
 
 
 def route_channel(symbol: str, qqq: Iterable[str], sp500: Iterable[str]) -> str:
@@ -28,7 +35,7 @@ def route_channel(symbol: str, qqq: Iterable[str], sp500: Iterable[str]) -> str:
 
 def post(channel_id: str, text: str, token: Optional[str] = None) -> dict:
     """Post a message via chat.postMessage. Returns the parsed API response."""
-    token = token or os.environ.get("SLACK_BOT_TOKEN")
+    token = _resolve_token(token)
     if not token:
         raise RuntimeError("SLACK_BOT_TOKEN not set")
     payload = json.dumps({"channel": channel_id, "text": text}).encode()
@@ -43,7 +50,7 @@ def post(channel_id: str, text: str, token: Optional[str] = None) -> dict:
 def upload_image(channel_id: str, image_path: str, comment: str,
                  token: Optional[str] = None) -> dict:
     """Upload a PNG to a channel via Slack's 3-step external-upload flow."""
-    token = token or os.environ.get("SLACK_BOT_TOKEN")
+    token = _resolve_token(token)
     if not token:
         raise RuntimeError("SLACK_BOT_TOKEN not set")
     auth = {"Authorization": f"Bearer {token}"}
