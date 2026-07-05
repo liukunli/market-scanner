@@ -17,7 +17,7 @@ from typing import Optional, Sequence
 
 from .config import HourlyConfig, HOURLY
 from .hourly import Bar, evaluate
-from .timeutil import et_date
+from .timeutil import local_date
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,7 @@ class Trade:
 
 
 def _bar_day(b: Bar) -> str:
-    return et_date(b.ts)
+    return local_date(b.ts)
 
 
 def simulate(bars: Sequence[Bar], i: int, side: str, entry: float, stop: float,

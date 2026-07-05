@@ -77,13 +77,15 @@ python3 -m pytest tests/ -q            # 49 tests, fully mocked, no network
 
 ## Scheduling (Claude routine, cron in UTC)
 
+Displayed timestamps use **Pacific time** (`config.DISPLAY_TZ`, auto PST/PDT).
 Cadence: pre-market **once at open**, stocks **hourly**, index **every 30 min**.
 Cloud cron minimum interval is 1 hour, so sub-hour/half-hour cadences use two
-offset routines. For EDT (summer); shift back 1 hour for EST (winter):
+offset routines. Cron is UTC (unaffected by display zone); values below are for
+EDT/PDT (summer) — shift back 1 hour in winter:
 
-| Routine | cron (UTC) | fires (ET) |
+| Routine | cron (UTC) | fires (PT) |
 |---------|-----------|-----------|
-| pre-market | `0 13 * * 1-5` | 9:00 |
-| hourly (stocks) | `30 14-19 * * 1-5` + `0 20 * * 1-5` | 10:30–16:00 |
-| index 30m (A) | `0 14-19 * * 1-5` | 10:00–15:00 |
-| index 30m (B) | `30 13-19 * * 1-5` | 9:30–15:30 |
+| pre-market | `0 13 * * 1-5` | 6:00 |
+| hourly (stocks) | `30 14-19 * * 1-5` + `0 20 * * 1-5` | 7:30–13:00 |
+| index 30m (A) | `0 14-19 * * 1-5` | 7:00–12:00 |
+| index 30m (B) | `30 13-19 * * 1-5` | 6:30–12:30 |

@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Optional
 
 from .hourly import Bar
-from .timeutil import et_date
+from .timeutil import local_date
 
 _UA = {"User-Agent": "Mozilla/5.0"}
 _CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}?{q}"
@@ -44,7 +44,7 @@ def _chart(symbol: str, params: str) -> Optional[dict]:
 
 
 def latest_session_date(probe: str = "SPY") -> Optional[str]:
-    """ET date (YYYY-MM-DD) of the most recent price print for `probe`,
+    """Local (display-zone) date of the most recent price print for `probe`,
     including pre/post-market. Used to detect holidays: if this != today,
     there is no live session and scanners should not post."""
     res = _chart(probe, "interval=1m&range=1d&includePrePost=true")
@@ -55,9 +55,9 @@ def latest_session_date(probe: str = "SPY") -> Optional[str]:
     closes = q.get("close") or []
     for i in range(len(closes) - 1, -1, -1):
         if closes[i] is not None:
-            return et_date(ts[i])
+            return local_date(ts[i])
     rmt = res.get("meta", {}).get("regularMarketTime")
-    return et_date(rmt) if rmt else None
+    return local_date(rmt) if rmt else None
 
 
 def bars(symbol: str, interval: str = "1h", lookback: str = "1mo") -> list[Bar]:

@@ -5,11 +5,11 @@ from typing import Sequence
 
 from .hourly import Signal
 from .premarket import GapResult
-from .timeutil import et_stamp
+from .timeutil import local_stamp
 
 
 def _fmt_ts(ts: int) -> str:
-    return et_stamp(ts)
+    return local_stamp(ts)
 
 
 def format_premarket(universe: str, ups: Sequence[GapResult],

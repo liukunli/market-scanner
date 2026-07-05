@@ -19,7 +19,7 @@ from .config import (CHANNELS, HOURLY, tier_tag,
                      MAX_SIGNALS_PER_DIRECTION, POST_THROTTLE_SECONDS)
 from .hourly import scan_up, scan_down
 from .signal_export import build_record
-from .timeutil import today_et
+from .timeutil import today_local
 
 
 def _caption(sig, tag: str) -> str:
@@ -50,7 +50,7 @@ def _render_chart(symbol, bars, side, outdir) -> str | None:
 
 def run(post_signal=slack.post_signal) -> dict:
     now = time.time()
-    today = today_et(now)
+    today = today_local(now)
     session = yahoo.latest_session_date()
     if session != today:
         print(f"[skip] no live session today (latest={session}, today={today})")

@@ -1,6 +1,9 @@
 """Tunable configuration: thresholds, channel routing, universe definitions."""
 from dataclasses import dataclass
 
+# Timezone used for all displayed timestamps (auto-handles PST/PDT via zoneinfo).
+DISPLAY_TZ = "America/Los_Angeles"
+
 # --- Index ETFs treated as their own focus tier ---------------------------------
 INDEX_ETFS = ("QQQ", "SPY", "IWM")
 

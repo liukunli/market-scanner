@@ -19,11 +19,11 @@ from . import yahoo
 from .backtest import simulate
 from .config import HourlyConfig, HOURLY, INDEX_ETFS
 from .hourly import Bar, evaluate
-from .timeutil import et_date, to_et
+from .timeutil import local_date, to_local
 
 
 def _iso(ts: int) -> str:
-    return to_et(ts).strftime("%Y-%m-%d %H:%M")
+    return to_local(ts).strftime("%Y-%m-%d %H:%M")
 
 
 def _gates(p: Bar, c: Bar, bars: Sequence[Bar], i: int, side: str,
@@ -117,7 +117,7 @@ def export(symbols, day: str, cfg: HourlyConfig = HOURLY,
         if not bars or len(bars) < cfg.min_bars:
             continue
         for i in range(cfg.min_bars - 1, len(bars)):
-            if et_date(bars[i].ts) != day:
+            if local_date(bars[i].ts) != day:
                 continue
             for side in ("up", "down"):
                 rec = build_record(sym, bars, i, side, cfg, context, forward_show)

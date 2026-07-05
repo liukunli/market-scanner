@@ -11,7 +11,7 @@ from . import universe, yahoo, slack
 from .config import CHANNELS, PREMARKET, POST_THROTTLE_SECONDS
 from .format import format_premarket
 from .premarket import Quote, scan
-from .timeutil import today_et
+from .timeutil import today_local
 
 
 def _safe_post(channel, text):
@@ -24,7 +24,7 @@ def _safe_post(channel, text):
 
 def run() -> dict:
     now = time.time()
-    today = today_et(now)
+    today = today_local(now)
     session = yahoo.latest_session_date()
     if session != today:
         print(f"[skip] no live session today (latest={session}, today={today})")

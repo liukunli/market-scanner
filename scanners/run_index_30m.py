@@ -52,8 +52,8 @@ def _render_chart(symbol, bars, side, outdir):
 
 def run(post_signal=slack.post_signal) -> dict:
     now = time.time()
-    from .timeutil import today_et
-    if yahoo.latest_session_date() != today_et(now):
+    from .timeutil import today_local
+    if yahoo.latest_session_date() != today_local(now):
         print("[skip] no live session today")
         return {"skipped": True}
 
