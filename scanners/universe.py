@@ -127,12 +127,18 @@ def sp500_constituents(now: float, ttl_seconds: int = 86400) -> list[str]:
 
 
 def _parse_nasdaq100(html: str) -> list[str]:
-    syms = re.findall(r'<td><a[^>]*>([A-Z]{1,5})</a>\s*</td>', html)
+    m = re.search(r'id="constituents".*?</table>', html, re.S)
+    if not m:
+        return []
     seen, out = set(), []
-    for s in syms:
-        if s not in seen:
-            seen.add(s)
-            out.append(s)
+    for row in re.findall(r"<tr[^>]*>.*?</tr>", m.group(0), re.S):
+        tds = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+        if not tds:
+            continue
+        tk = re.sub(r"<[^>]+>", "", tds[0]).strip().upper()  # first cell = ticker
+        if re.fullmatch(r"[A-Z.]{1,6}", tk) and tk not in seen:
+            seen.add(tk)
+            out.append(tk)
     return out
 
 

@@ -74,3 +74,13 @@ def test_parse_wikipedia_sp500():
             '<tr><td><a href="/y">MSFT</a></td><td>Microsoft</td></tr>'
             '<tr><td><a href="/z">AAPL</a></td><td>dup</td></tr></table>')
     assert _parse_wikipedia_sp500(html) == ["AAPL", "MSFT"]
+
+
+def test_parse_nasdaq100_plain_td_cells():
+    # Nasdaq-100 page has the ticker in a plain (unlinked) first <td>
+    from scanners.universe import _parse_nasdaq100
+    html = ('<table id="constituents"><tr><th>Ticker</th><th>Company</th></tr>'
+            '<tr><td>ADBE</td><td><a href="/x">Adobe Inc.</a></td></tr>'
+            '<tr><td>AMD</td><td><a href="/y">AMD</a></td></tr>'
+            '<tr><td>ADBE</td><td>dup</td></tr></table>')
+    assert _parse_nasdaq100(html) == ["ADBE", "AMD"]
