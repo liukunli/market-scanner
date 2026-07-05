@@ -89,3 +89,40 @@ EDT/PDT (summer) — shift back 1 hour in winter:
 | hourly (stocks) | `30 14-19 * * 1-5` + `0 20 * * 1-5` | 7:30–13:00 |
 | index 30m (A) | `0 14-19 * * 1-5` | 7:00–12:00 |
 | index 30m (B) | `30 13-19 * * 1-5` | 6:30–12:30 |
+
+> Cloud routines require the claude.ai↔GitHub account connection, which may be
+> blocked by a GitHub **org policy** ("GitHub sync isn't available for your
+> organization"). If so, use local scheduling below.
+
+## Local scheduling (macOS launchd)
+
+No GitHub needed — runs on the local machine. Weekday/holiday filtering is
+handled by the scanner's own session guard, so the LaunchAgents only specify
+times (no weekday logic).
+
+**Pieces**
+- `~/.config/market-scanner.env` — `export SLACK_BOT_TOKEN="xoxb-…"` (chmod 600, off git)
+- `scripts/run_scanner.sh <module>` — loads the env, runs the module from the
+  repo root, appends output to `~/Library/Logs/market-scanner/<module>.log`
+- 3 LaunchAgents in `~/Library/LaunchAgents/`:
+
+| Label | module | fires (PT) |
+|-------|--------|-----------|
+| `com.market-scanner.premarket` | `run_premarket` | 6:00 AM |
+| `com.market-scanner.hourly` | `run_hourly` | 7:30 AM–1:00 PM (hourly) |
+| `com.market-scanner.index30m` | `run_index_30m` | 6:30 AM–1:00 PM (every 30 min) |
+
+**Manage**
+```bash
+launchctl list | grep market-scanner                 # status
+tail -f ~/Library/Logs/market-scanner/run_hourly.log  # watch output
+scripts/run_scanner.sh run_premarket                  # run once now (manual)
+launchctl unload ~/Library/LaunchAgents/com.market-scanner.hourly.plist   # pause one
+launchctl load  -w ~/Library/LaunchAgents/com.market-scanner.hourly.plist # resume
+```
+
+**Caveats**
+- Runs only while the Mac is awake; a fully-off machine misses that slot.
+- The token lives in the local env file — rotate by editing that file (no code change).
+- Signals are **informational** — backtests did not show a positive edge with a
+  realistic (non-degenerate) stop; validate before trading.
