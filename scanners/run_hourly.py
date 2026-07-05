@@ -15,9 +15,11 @@ import tempfile
 import time
 
 from . import universe, yahoo, slack
-from .config import CHANNELS, INDEX_ETFS, HOURLY, tier_tag
+from .config import (CHANNELS, INDEX_ETFS, HOURLY, tier_tag,
+                     MAX_SIGNALS_PER_DIRECTION, POST_THROTTLE_SECONDS)
 from .hourly import scan_up, scan_down
 from .signal_export import build_record
+from .timeutil import today_et
 
 
 def _caption(sig, tag: str) -> str:
@@ -48,26 +50,43 @@ def _render_chart(symbol, bars, side, outdir) -> str | None:
 
 def run(post_signal=slack.post_signal) -> dict:
     now = time.time()
+    today = today_et(now)
+    session = yahoo.latest_session_date()
+    if session != today:
+        print(f"[skip] no live session today (latest={session}, today={today})")
+        return {"skipped": True, "latest_session": session}
+
     qqq = universe.qqq_constituents(now)
     sp500 = universe.sp500_constituents(now)
     symbols = list(dict.fromkeys(list(INDEX_ETFS) + universe.us_5b_universe(now)))
     bars_by = yahoo.fetch_all(symbols, yahoo.hourly_bars)
 
-    outdir = tempfile.mkdtemp(prefix="signals_")
-    counts = {"up": 0, "down": 0}
+    # collect signals per direction, then rank + cap to control noise / rate limits
+    found = {"up": [], "down": []}
     for sym, bars in bars_by.items():
         if not bars:
             continue
-        for side, channel in (("up", CHANNELS["hourly_up"]),
-                              ("down", CHANNELS["hourly_down"])):
+        for side in ("up", "down"):
             sig = scan_up(sym, bars, HOURLY) if side == "up" \
                 else scan_down(sym, bars, HOURLY)
-            if not sig:
-                continue
+            if sig:
+                found[side].append((sig, sym, bars))
+
+    outdir = tempfile.mkdtemp(prefix="signals_")
+    counts = {}
+    for side, channel in (("up", CHANNELS["hourly_up"]),
+                          ("down", CHANNELS["hourly_down"])):
+        ranked = sorted(found[side], key=lambda t: -t[0].risk_reward)
+        selected = ranked[:MAX_SIGNALS_PER_DIRECTION]
+        for sig, sym, bars in selected:
             tag = tier_tag(sym, qqq, sp500)
             chart = _render_chart(sym, bars, side, outdir)
-            post_signal(channel, _caption(sig, tag), chart)
-            counts[side] += 1
+            try:
+                post_signal(channel, _caption(sig, tag), chart)
+            except Exception as e:  # noqa: BLE001 - one bad post must not abort
+                print(f"[warn] post {sym} {side} failed: {e}")
+            time.sleep(POST_THROTTLE_SECONDS)
+        counts[side] = {"posted": len(selected), "found": len(found[side])}
     return counts
 
 

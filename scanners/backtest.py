@@ -12,14 +12,12 @@ Assumptions (documented so results are honest):
 """
 from __future__ import annotations
 
-import datetime
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
 from .config import HourlyConfig, HOURLY
 from .hourly import Bar, evaluate
-
-ET = datetime.timezone(datetime.timedelta(hours=-4))  # EDT
+from .timeutil import et_date
 
 
 @dataclass(frozen=True)
@@ -37,7 +35,7 @@ class Trade:
 
 
 def _bar_day(b: Bar) -> str:
-    return datetime.datetime.fromtimestamp(b.ts, ET).strftime("%Y-%m-%d")
+    return et_date(b.ts)
 
 
 def simulate(bars: Sequence[Bar], i: int, side: str, entry: float, stop: float,

@@ -33,6 +33,30 @@ def _read_cache(name: str, ttl_seconds: int, now: float) -> list | None:
     return None
 
 
+def _read_cache_any(name: str) -> list | None:
+    """Read the cache regardless of age (used as a fetch-failure fallback)."""
+    p = _cache_path(name)
+    if os.path.isfile(p):
+        with open(p) as fh:
+            return json.load(fh)
+    return None
+
+
+def _fetch_or_cached(name: str, fetch_fn):
+    """Run fetch_fn(); on failure fall back to a stale cache, else re-raise
+    only if there is nothing usable. Keeps a scheduled run alive when a data
+    source transiently blocks the cloud IP."""
+    try:
+        syms = fetch_fn()
+        if syms:
+            _write_cache(name, syms)
+            return syms
+    except Exception:
+        pass
+    stale = _read_cache_any(name)
+    return stale if stale is not None else []
+
+
 def _write_cache(name: str, data: list) -> None:
     os.makedirs(CACHE_DIR, exist_ok=True)
     with open(_cache_path(name), "w") as fh:
@@ -83,34 +107,40 @@ def us_5b_universe(now: float, ttl_seconds: int = 86400) -> list[str]:
     cached = _read_cache("us_5b.json", ttl_seconds, now)
     if cached is not None:
         return cached
-    url = ("https://api.nasdaq.com/api/screener/stocks"
-           "?tableonly=true&limit=0&offset=0&download=true")
-    syms = _parse_nasdaq_screener(json.loads(_fetch(url)))
-    _write_cache("us_5b.json", syms)
-    return syms
+
+    def fetch():
+        url = ("https://api.nasdaq.com/api/screener/stocks"
+               "?tableonly=true&limit=0&offset=0&download=true")
+        return _parse_nasdaq_screener(json.loads(_fetch(url)))
+    return _fetch_or_cached("us_5b.json", fetch)
 
 
 def sp500_constituents(now: float, ttl_seconds: int = 86400) -> list[str]:
     cached = _read_cache("sp500.json", ttl_seconds, now)
     if cached is not None:
         return cached
-    html = _fetch("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")
-    syms = _parse_wikipedia_sp500(html)
-    _write_cache("sp500.json", syms)
-    return syms
+
+    def fetch():
+        html = _fetch("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")
+        return _parse_wikipedia_sp500(html)
+    return _fetch_or_cached("sp500.json", fetch)
 
 
-def qqq_constituents(now: float, ttl_seconds: int = 86400) -> list[str]:
-    cached = _read_cache("qqq.json", ttl_seconds, now)
-    if cached is not None:
-        return cached
-    html = _fetch("https://en.wikipedia.org/wiki/Nasdaq-100")
-    # Nasdaq-100 page lists tickers in a column of the constituents table
+def _parse_nasdaq100(html: str) -> list[str]:
     syms = re.findall(r'<td><a[^>]*>([A-Z]{1,5})</a>\s*</td>', html)
     seen, out = set(), []
     for s in syms:
         if s not in seen:
             seen.add(s)
             out.append(s)
-    _write_cache("qqq.json", out)
     return out
+
+
+def qqq_constituents(now: float, ttl_seconds: int = 86400) -> list[str]:
+    cached = _read_cache("qqq.json", ttl_seconds, now)
+    if cached is not None:
+        return cached
+
+    def fetch():
+        return _parse_nasdaq100(_fetch("https://en.wikipedia.org/wiki/Nasdaq-100"))
+    return _fetch_or_cached("qqq.json", fetch)

@@ -54,3 +54,7 @@ class PremarketConfig:
 
 HOURLY = HourlyConfig()
 PREMARKET = PremarketConfig()
+
+# --- routine safeguards ---------------------------------------------------------
+MAX_SIGNALS_PER_DIRECTION = 15   # cap hourly posts/charts per run (ranked by R:R)
+POST_THROTTLE_SECONDS = 1.1      # spacing between Slack posts to avoid 429s

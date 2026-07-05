@@ -1,17 +1,15 @@
 """Render scanner results into Slack message text (pure, testable)."""
 from __future__ import annotations
 
-import datetime
 from typing import Sequence
 
 from .hourly import Signal
 from .premarket import GapResult
-
-ET = datetime.timezone(datetime.timedelta(hours=-4))  # EDT (adjust to -5 in winter)
+from .timeutil import et_stamp
 
 
 def _fmt_ts(ts: int) -> str:
-    return datetime.datetime.fromtimestamp(ts, ET).strftime("%Y-%m-%d %H:%M ET")
+    return et_stamp(ts)
 
 
 def format_premarket(universe: str, ups: Sequence[GapResult],

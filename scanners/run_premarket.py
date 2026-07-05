@@ -8,35 +8,47 @@ from __future__ import annotations
 import time
 
 from . import universe, yahoo, slack
-from .config import CHANNELS, PREMARKET
+from .config import CHANNELS, PREMARKET, POST_THROTTLE_SECONDS
 from .format import format_premarket
 from .premarket import Quote, scan
+from .timeutil import today_et
 
 
-def _quotes_for(symbols) -> list[Quote]:
-    results = yahoo.fetch_all(symbols, yahoo.premarket_quote)
-    quotes = []
-    for sym, r in results.items():
-        if not r:
-            continue
-        prev_close, price, vol = r
-        quotes.append(Quote(symbol=sym, prev_close=prev_close,
-                            premarket_price=price, premarket_volume=vol))
-    return quotes
+def _safe_post(channel, text):
+    try:
+        slack.post(channel, text)
+    except Exception as e:  # noqa: BLE001 - never let one post abort the run
+        print(f"[warn] post to {channel} failed: {e}")
+    time.sleep(POST_THROTTLE_SECONDS)
 
 
-def run(post=slack.post) -> dict:
+def run() -> dict:
     now = time.time()
-    universes = {
-        ("QQQ", CHANNELS["qqq"]): universe.qqq_constituents(now),
-        ("S&P 500", CHANNELS["sp500"]): universe.sp500_constituents(now),
-        ("US > $5B", CHANNELS["other_5b"]): universe.us_5b_universe(now),
-    }
+    today = today_et(now)
+    session = yahoo.latest_session_date()
+    if session != today:
+        print(f"[skip] no live session today (latest={session}, today={today})")
+        return {"skipped": True, "latest_session": session}
+
+    qqq = set(universe.qqq_constituents(now))
+    sp500 = set(universe.sp500_constituents(now))
+    five_b = universe.us_5b_universe(now)
+
+    # fetch every unique symbol ONCE, then slice per universe (was 3x overlap)
+    all_syms = list(dict.fromkeys(list(qqq) + list(sp500) + list(five_b)))
+    raw = yahoo.fetch_all(all_syms, yahoo.premarket_quote)
+    quotes = {s: Quote(symbol=s, prev_close=r[0], premarket_price=r[1],
+                      premarket_volume=r[2])
+              for s, r in raw.items() if r}
+
+    universes = [("QQQ", CHANNELS["qqq"], qqq),
+                 ("S&P 500", CHANNELS["sp500"], sp500),
+                 ("US > $5B", CHANNELS["other_5b"], set(five_b))]
     summary = {}
-    for (label, channel), syms in universes.items():
-        ups, downs = scan(_quotes_for(syms), PREMARKET)
-        text = format_premarket(label, ups, downs)
-        post(channel, text)
+    for label, channel, members in universes:
+        qs = [quotes[s] for s in members if s in quotes]
+        ups, downs = scan(qs, PREMARKET)
+        _safe_post(channel, format_premarket(label, ups, downs))
         summary[label] = (len(ups), len(downs))
     return summary
 

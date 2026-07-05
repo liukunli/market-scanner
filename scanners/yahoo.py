@@ -6,20 +6,32 @@ monkeypatched out in tests.
 from __future__ import annotations
 
 import json
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Optional
 
 from .hourly import Bar
+from .timeutil import et_date
 
 _UA = {"User-Agent": "Mozilla/5.0"}
 _CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}?{q}"
 
 
-def _get_json(url: str, timeout: int = 15) -> dict:
-    req = urllib.request.Request(url, headers=_UA)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())
+def _get_json(url: str, timeout: int = 15, retries: int = 2) -> dict:
+    """GET with small exponential backoff so a transient failure/429 doesn't
+    silently drop a symbol on a scheduled run."""
+    last = None
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(url, headers=_UA)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read().decode())
+        except Exception as e:  # noqa: BLE001 - retry any transient error
+            last = e
+            if attempt < retries:
+                time.sleep(0.4 * (attempt + 1))
+    raise last
 
 
 def _chart(symbol: str, params: str) -> Optional[dict]:
@@ -29,6 +41,23 @@ def _chart(symbol: str, params: str) -> Optional[dict]:
         return res[0] if res else None
     except Exception:
         return None
+
+
+def latest_session_date(probe: str = "SPY") -> Optional[str]:
+    """ET date (YYYY-MM-DD) of the most recent price print for `probe`,
+    including pre/post-market. Used to detect holidays: if this != today,
+    there is no live session and scanners should not post."""
+    res = _chart(probe, "interval=1m&range=1d&includePrePost=true")
+    if not res:
+        return None
+    ts = res.get("timestamp") or []
+    q = (res.get("indicators", {}).get("quote") or [{}])[0]
+    closes = q.get("close") or []
+    for i in range(len(closes) - 1, -1, -1):
+        if closes[i] is not None:
+            return et_date(ts[i])
+    rmt = res.get("meta", {}).get("regularMarketTime")
+    return et_date(rmt) if rmt else None
 
 
 def hourly_bars(symbol: str, lookback: str = "1mo") -> list[Bar]:
