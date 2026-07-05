@@ -47,5 +47,7 @@ def format_hourly(title: str, signals: Sequence[Signal]) -> str:
             f"\n*{s.symbol}*  entry `{s.entry:.2f}`  "
             f"stop `{s.stop_loss:.2f}`  target `{s.take_profit:.2f}`  "
             f"(R:R {s.risk_reward:.2f}, rvol {s.rvol:.2f})"
+            f"\n    ↳ move stop → entry `{s.entry:.2f}` once price hits "
+            f"`{s.breakeven_trigger:.2f}` (breakeven, no-loss)"
         )
     return "\n".join(lines)

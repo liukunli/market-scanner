@@ -27,9 +27,12 @@ def test_format_hourly_empty():
 
 
 def test_format_hourly_content():
-    sig = Signal("NVDA", "up", 104.4, 103.45, 108.4, 4.21, 2.5, 101, 2.0, 2.0)
+    sig = Signal("NVDA", "up", 104.4, 103.45, 108.4, 4.21, 2.5, 101, 2.0, 2.0,
+                 breakeven_trigger=105.55)
     out = format_hourly("Scan-Up (buy)", [sig])
     assert "NVDA" in out and "104.40" in out and "108.40" in out and "BUY" in out
+    # breakeven rule surfaced in the message
+    assert "105.55" in out and "breakeven" in out.lower()
 
 
 # ---- channel routing (priority: ETF > QQQ > S&P 500 > other) -------------------

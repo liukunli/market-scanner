@@ -27,6 +27,8 @@ class HourlyConfig:
     vol_lookback: int = 20             # N bars used for the average-volume baseline
     tp_bars: int = 2                   # project take-profit this many bars of same magnitude ahead
     min_bars: int = 3                  # minimum bars required to evaluate (2 signal + >=1 baseline)
+    breakeven_trigger_frac: float = 0.5  # once price moves this fraction of the current bar's
+                                         # range in-favor, the stop is moved to entry (breakeven)
 
 
 @dataclass(frozen=True)

@@ -54,6 +54,7 @@ class Signal:
     bar_ts: int              # ts of the current (signal) bar
     prev_gain: float         # g_p
     curr_gain: float         # g_c
+    breakeven_trigger: float = 0.0   # price at which the stop moves to entry (no-loss)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -111,12 +112,15 @@ def evaluate(symbol: str, bars: Sequence[Bar], side: str,
     entry = c.close
     stop_loss = (c.high + c.low) / 2.0
     gbar = (g_p + g_c) / 2.0
+    move = cfg.breakeven_trigger_frac * c.range   # in-favor move that arms breakeven
     if side == "up":
         take_profit = entry + cfg.tp_bars * gbar
+        breakeven_trigger = entry + move
         risk = entry - stop_loss
         reward = take_profit - entry
     else:
         take_profit = entry - cfg.tp_bars * gbar
+        breakeven_trigger = entry - move
         risk = stop_loss - entry
         reward = entry - take_profit
 
@@ -129,6 +133,7 @@ def evaluate(symbol: str, bars: Sequence[Bar], side: str,
         stop_loss=round(stop_loss, 4), take_profit=round(take_profit, 4),
         risk_reward=round(risk_reward, 3), rvol=round(rvol, 3),
         bar_ts=c.ts, prev_gain=round(g_p, 4), curr_gain=round(g_c, 4),
+        breakeven_trigger=round(breakeven_trigger, 4),
     )
 
 

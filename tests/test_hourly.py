@@ -33,6 +33,8 @@ def test_scan_up_triggers():
     assert sig.take_profit == pytest.approx(104.4 + 2 * 2.0)
     assert sig.risk_reward > 0
     assert sig.rvol == pytest.approx((200 + 300) / 2 / 100.0)
+    # breakeven trigger = entry + 0.5 * current-bar range (range = 104.6 - 102.3)
+    assert sig.breakeven_trigger == pytest.approx(104.4 + 0.5 * (104.6 - 102.3))
 
 
 def test_scan_up_requires_both_green():
