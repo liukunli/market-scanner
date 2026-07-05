@@ -15,7 +15,7 @@ import tempfile
 import time
 
 from . import yahoo, slack, options
-from .config import CHANNELS, INDEX_ETFS, HOURLY, POST_THROTTLE_SECONDS
+from .config import CHANNELS, INDEX_ETFS, INDEX_30M, POST_THROTTLE_SECONDS
 from .hourly import scan_up, scan_down
 from .signal_export import build_record
 
@@ -39,7 +39,7 @@ def _caption(sig, opt) -> str:
 def _render_chart(symbol, bars, side, outdir):
     try:
         from .visualize import render_signal
-        rec = build_record(symbol, bars, len(bars) - 1, side, HOURLY,
+        rec = build_record(symbol, bars, len(bars) - 1, side, INDEX_30M,
                            context=12, forward_show=0)
         if not rec:
             return None
@@ -65,8 +65,8 @@ def run(post_signal=slack.post_signal) -> dict:
         if not bars:
             continue
         for side in ("up", "down"):
-            sig = scan_up(sym, bars, HOURLY) if side == "up" \
-                else scan_down(sym, bars, HOURLY)
+            sig = scan_up(sym, bars, INDEX_30M) if side == "up" \
+                else scan_down(sym, bars, INDEX_30M)
             if not sig:
                 continue
             opt = options.option_for_signal(sym, sig.take_profit, side)

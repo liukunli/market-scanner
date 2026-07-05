@@ -35,3 +35,10 @@ def test_post_signal_falls_back_to_text(monkeypatch):
     calls.clear()
     slack.post_signal("C123", "again", chart_path="/no/such/file.png")
     assert calls["t"] == ("C123", "again")
+
+
+def test_index_config_looser_than_hourly():
+    from scanners.config import INDEX_30M, HOURLY
+    assert INDEX_30M.rvol_min < HOURLY.rvol_min
+    assert INDEX_30M.magnitude_tol > HOURLY.magnitude_tol
+    assert INDEX_30M.low_near_high_frac > HOURLY.low_near_high_frac

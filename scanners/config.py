@@ -57,6 +57,17 @@ class PremarketConfig:
 
 
 HOURLY = HourlyConfig()
+
+# Index 30-min scan (QQQ/SPY/IWM) — looser gates, calibrated on 60d of 30m bars
+# to fire ~0.5-1 signal/day per ticker (QQQ 0.80, SPY 0.67, IWM 0.82). The stock
+# hourly scan stays strict (HOURLY above).
+INDEX_30M = HourlyConfig(
+    rvol_min=0.8,
+    magnitude_tol=0.7,
+    low_near_high_frac=0.35,
+    max_drawback_frac=0.35,
+)
+
 PREMARKET = PremarketConfig()
 
 # --- routine safeguards ---------------------------------------------------------
