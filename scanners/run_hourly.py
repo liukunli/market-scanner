@@ -15,12 +15,11 @@ import tempfile
 import time
 
 from . import universe, yahoo, slack
-from .config import (CHANNELS, HOURLY, tier_tag, TREND_SMA_PERIOD,
+from .config import (CHANNELS, HOURLY, tier_tag,
                      MAX_SIGNALS_PER_DIRECTION, POST_THROTTLE_SECONDS)
 from .hourly import scan_up, scan_down
 from .signal_export import build_record
 from .timeutil import today_local
-from .trend import completed_daily_bars, trend_aligned
 
 
 def _caption(sig, tag: str) -> str:
@@ -62,19 +61,16 @@ def run(post_signal=slack.post_signal) -> dict:
     # index ETFs are covered by the 30-min scan (run_index_30m); stocks only here
     symbols = universe.us_5b_universe(now)
     bars_by = yahoo.fetch_all(symbols, yahoo.hourly_bars)
-    daily_bars_by = yahoo.fetch_all(
-        symbols, lambda s: yahoo.bars(s, interval="1d", lookback="6mo"))
 
     # collect signals per direction, then rank + cap to control noise / rate limits
     found = {"up": [], "down": []}
     for sym, bars in bars_by.items():
         if not bars:
             continue
-        daily = completed_daily_bars(daily_bars_by.get(sym) or [], today)
         for side in ("up", "down"):
             sig = scan_up(sym, bars, HOURLY) if side == "up" \
                 else scan_down(sym, bars, HOURLY)
-            if sig and trend_aligned(side, daily, TREND_SMA_PERIOD):
+            if sig:
                 found[side].append((sig, sym, bars))
 
     outdir = tempfile.mkdtemp(prefix="signals_")
