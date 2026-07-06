@@ -59,7 +59,8 @@ def run(post_signal=slack.post_signal) -> dict:
 
     channel = CHANNELS["index_options"]
     outdir = tempfile.mkdtemp(prefix="index30_")
-    counts = {"up": 0, "down": 0}
+    counts = {"up": {"found": 0, "posted": 0, "errors": []},
+             "down": {"found": 0, "posted": 0, "errors": []}}
     for sym in INDEX_ETFS:
         bars = yahoo.half_hour_bars(sym)
         if not bars:
@@ -69,14 +70,16 @@ def run(post_signal=slack.post_signal) -> dict:
                 else scan_down(sym, bars, INDEX_30M)
             if not sig:
                 continue
+            counts[side]["found"] += 1
             opt = options.option_for_signal(sym, sig.take_profit, side)
             chart = _render_chart(sym, bars, side, outdir)
             try:
                 post_signal(channel, _caption(sig, opt), chart)
+                counts[side]["posted"] += 1
             except Exception as e:  # noqa: BLE001
                 print(f"[warn] post {sym} {side} failed: {e}")
+                counts[side]["errors"].append(f"{sym}: {e}")
             time.sleep(POST_THROTTLE_SECONDS)
-            counts[side] += 1
     return counts
 
 

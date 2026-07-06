@@ -34,7 +34,12 @@ def route_channel(symbol: str, qqq: Iterable[str], sp500: Iterable[str]) -> str:
 
 
 def post(channel_id: str, text: str, token: Optional[str] = None) -> dict:
-    """Post a message via chat.postMessage. Returns the parsed API response."""
+    """Post a message via chat.postMessage. Returns the parsed API response.
+
+    Raises RuntimeError if Slack's response has "ok": false (e.g. not_in_channel,
+    channel_not_found, missing_scope) - these come back as HTTP 200, so a plain
+    network try/except around this call would otherwise never see the failure.
+    """
     token = _resolve_token(token)
     if not token:
         raise RuntimeError("SLACK_BOT_TOKEN not set")
@@ -44,7 +49,10 @@ def post(channel_id: str, text: str, token: Optional[str] = None) -> dict:
         headers={"Content-Type": "application/json; charset=utf-8",
                  "Authorization": f"Bearer {token}"}, method="POST")
     with urllib.request.urlopen(req, timeout=20) as resp:
-        return json.loads(resp.read().decode())
+        result = json.loads(resp.read().decode())
+    if not result.get("ok"):
+        raise RuntimeError(f"Slack post to {channel_id} failed: {result.get('error')}")
+    return result
 
 
 def upload_image(channel_id: str, image_path: str, comment: str,
@@ -81,10 +89,13 @@ def upload_image(channel_id: str, image_path: str, comment: str,
     # 3) complete -> shares into the channel with the caption
     comp = json.dumps({"files": [{"id": file_id, "title": name}],
                       "channel_id": channel_id, "initial_comment": comment}).encode()
-    return json.loads(urllib.request.urlopen(urllib.request.Request(
+    result = json.loads(urllib.request.urlopen(urllib.request.Request(
         "https://slack.com/api/files.completeUploadExternal", data=comp,
         headers={**auth, "Content-Type": "application/json; charset=utf-8"},
         method="POST"), timeout=20).read())
+    if not result.get("ok"):
+        raise RuntimeError(f"completeUploadExternal to {channel_id} failed: {result.get('error')}")
+    return result
 
 
 def post_signal(channel_id: str, text: str, chart_path: Optional[str] = None,

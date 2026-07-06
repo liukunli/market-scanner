@@ -79,15 +79,18 @@ def run(post_signal=slack.post_signal) -> dict:
                           ("down", CHANNELS["hourly_down"])):
         ranked = sorted(found[side], key=lambda t: -t[0].risk_reward)
         selected = ranked[:MAX_SIGNALS_PER_DIRECTION]
+        posted, errors = 0, []
         for sig, sym, bars in selected:
             tag = tier_tag(sym, qqq, sp500)
             chart = _render_chart(sym, bars, side, outdir)
             try:
                 post_signal(channel, _caption(sig, tag), chart)
+                posted += 1
             except Exception as e:  # noqa: BLE001 - one bad post must not abort
                 print(f"[warn] post {sym} {side} failed: {e}")
+                errors.append(f"{sym}: {e}")
             time.sleep(POST_THROTTLE_SECONDS)
-        counts[side] = {"posted": len(selected), "found": len(found[side])}
+        counts[side] = {"posted": posted, "found": len(found[side]), "errors": errors}
     return counts
 
 

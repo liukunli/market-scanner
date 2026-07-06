@@ -14,12 +14,17 @@ from .premarket import Quote, scan
 from .timeutil import today_local
 
 
-def _safe_post(channel, text):
+def _safe_post(channel, text) -> str | None:
+    """Post, returning an error string on failure (never raises) so run() can
+    surface it in the returned summary instead of only printing a warning."""
+    error = None
     try:
         slack.post(channel, text)
     except Exception as e:  # noqa: BLE001 - never let one post abort the run
-        print(f"[warn] post to {channel} failed: {e}")
+        error = str(e)
+        print(f"[warn] post to {channel} failed: {error}")
     time.sleep(POST_THROTTLE_SECONDS)
+    return error
 
 
 def run() -> dict:
@@ -48,8 +53,8 @@ def run() -> dict:
     for label, channel, members in universes:
         qs = [quotes[s] for s in members if s in quotes]
         ups, downs = scan(qs, PREMARKET)
-        _safe_post(channel, format_premarket(label, ups, downs))
-        summary[label] = (len(ups), len(downs))
+        post_error = _safe_post(channel, format_premarket(label, ups, downs))
+        summary[label] = {"ups": len(ups), "downs": len(downs), "post_error": post_error}
     return summary
 
 
