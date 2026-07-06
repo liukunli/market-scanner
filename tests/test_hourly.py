@@ -1,6 +1,8 @@
 """Unit tests for the 1-hour scan-up / scan-down signal engine."""
 import pytest
 
+from dataclasses import replace
+
 from scanners.hourly import Bar, scan_up, scan_down, evaluate
 from scanners.config import HOURLY
 
@@ -73,6 +75,14 @@ def test_scan_up_requires_volume_above_average():
 
 def test_too_few_bars_returns_none():
     assert scan_up("TEST", up_bars()[-2:]) is None  # only 2 bars < min_bars
+
+
+def test_scan_up_rejects_unrealistically_tight_stop():
+    # canonical setup risks ~0.96% of entry; a floor above that must reject it
+    cfg = replace(HOURLY, min_risk_frac=0.01)
+    assert scan_up("TEST", up_bars(), cfg) is None
+    # the default floor (0.15%) still allows this setup through
+    assert scan_up("TEST", up_bars(), HOURLY) is not None
 
 
 # ---- scan-down: mirror image ---------------------------------------------------

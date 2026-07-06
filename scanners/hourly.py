@@ -124,7 +124,7 @@ def evaluate(symbol: str, bars: Sequence[Bar], side: str,
         risk = stop_loss - entry
         reward = entry - take_profit
 
-    if risk <= 0:
+    if risk <= 0 or risk / entry < cfg.min_risk_frac:
         return None
     risk_reward = reward / risk
 

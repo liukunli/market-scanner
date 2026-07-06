@@ -51,6 +51,10 @@ class HourlyConfig:
     min_bars: int = 3                  # minimum bars required to evaluate (2 signal + >=1 baseline)
     breakeven_trigger_frac: float = 0.5  # once price moves this fraction of the current bar's
                                          # range in-favor, the stop is moved to entry (breakeven)
+    min_risk_frac: float = 0.0015      # reject signals whose stop distance is < this frac of
+                                         # entry price (unrealistically tight; spread/slippage in
+                                         # live trading would exceed the stop, and the R-multiple
+                                         # metric blows up on the near-zero denominator)
 
 
 @dataclass(frozen=True)
