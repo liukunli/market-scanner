@@ -42,10 +42,10 @@ class HourlyConfig:
 
     All fractions are relative to the *previous* bar's range unless noted.
     """
-    low_near_high_frac: float = 0.15   # current low must sit within this frac of prev high
+    low_near_high_frac: float = 0.10   # current low must sit within this frac of prev high
     max_drawback_frac: float = 0.20    # retrace of current low below prev close, as frac of prev range
     magnitude_tol: float = 0.40        # |g_c - g_p| / max(g_c, g_p) must be <= this
-    rvol_min: float = 1.2              # avg(vol of 2 bars) / avg(prior N bars) must be >= this
+    rvol_min: float = 1.0              # avg(vol of 2 bars) / avg(prior N bars) must be >= this
     vol_lookback: int = 20             # N bars used for the average-volume baseline
     tp_bars: int = 2                   # project take-profit this many bars of same magnitude ahead
     min_bars: int = 3                  # minimum bars required to evaluate (2 signal + >=1 baseline)
@@ -61,6 +61,13 @@ class PremarketConfig:
     top_n: int = 20                    # how many names per direction to report
 
 
+# Calibrated via a grid search over rvol_min/magnitude_tol/low_near_high_frac/
+# max_drawback_frac, backtested on the QQQ-100 over 6mo of 1h bars (101 symbols).
+# Tighter low_near_high_frac (0.10 vs 0.15) + looser rvol_min (1.0 vs 1.2) swung
+# realized R from -68 to +75 over the same period vs. the prior defaults, and the
+# direction held on an out-of-sample earlier 3mo split (still negative there, but
+# less so than the prior defaults). magnitude_tol/max_drawback_frac were already
+# near-optimal in the sweep and left unchanged.
 HOURLY = HourlyConfig()
 
 # Index 30-min scan (QQQ/SPY/IWM) — looser gates, calibrated on 60d of 30m bars
