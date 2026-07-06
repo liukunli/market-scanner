@@ -89,3 +89,9 @@ PREMARKET = PremarketConfig()
 # --- routine safeguards ---------------------------------------------------------
 MAX_SIGNALS_PER_DIRECTION = 15   # cap hourly posts/charts per run (ranked by R:R)
 POST_THROTTLE_SECONDS = 1.1      # spacing between Slack posts to avoid 429s
+
+# Daily-trend filter for the hourly scan (see scanners/trend.py): only take
+# scan-up when the prior day's close is above its SMA, scan-down when below.
+# Backtested on the QQQ-100 over 6mo: roughly halves signal count but improves
+# avg R/trade in both an in-sample and out-of-sample split (SMA 20 helped less).
+TREND_SMA_PERIOD = 50
