@@ -74,7 +74,9 @@ def _parse_wikipedia_sp500(html: str) -> list[str]:
     m = re.search(r'id="constituents".*?</table>', html, re.S)
     if not m:
         return []
-    syms = re.findall(r'<td><a[^>]*>([A-Z\.]+)</a>', m.group(0))
+    # Wikipedia's Parsoid renderer puts an id="mwXX" on every <td>, so the
+    # first cell is <td id="...">, not a bare <td>.
+    syms = re.findall(r'<td[^>]*><a[^>]*>([A-Z\.]+)</a>', m.group(0))
     seen, out = set(), []
     for s in syms:
         if s not in seen:
@@ -126,19 +128,16 @@ def sp500_constituents(now: float, ttl_seconds: int = 86400) -> list[str]:
     return _fetch_or_cached("sp500.json", fetch)
 
 
-def _parse_nasdaq100(html: str) -> list[str]:
-    m = re.search(r'id="constituents".*?</table>', html, re.S)
-    if not m:
-        return []
+def _parse_nasdaq100_api(payload: dict) -> list[str]:
+    rows = payload.get("data", {}).get("data", {}).get("rows", [])
     seen, out = set(), []
-    for row in re.findall(r"<tr[^>]*>.*?</tr>", m.group(0), re.S):
-        tds = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
-        if not tds:
+    for r in rows:
+        sym = (r.get("symbol") or "").strip().upper()
+        if not sym or any(ch in sym for ch in ("^", "/", " ")):
             continue
-        tk = re.sub(r"<[^>]+>", "", tds[0]).strip().upper()  # first cell = ticker
-        if re.fullmatch(r"[A-Z.]{1,6}", tk) and tk not in seen:
-            seen.add(tk)
-            out.append(tk)
+        if sym not in seen:
+            seen.add(sym)
+            out.append(sym)
     return out
 
 
@@ -148,5 +147,6 @@ def qqq_constituents(now: float, ttl_seconds: int = 86400) -> list[str]:
         return cached
 
     def fetch():
-        return _parse_nasdaq100(_fetch("https://en.wikipedia.org/wiki/Nasdaq-100"))
+        url = "https://api.nasdaq.com/api/quote/list-type/nasdaq100"
+        return _parse_nasdaq100_api(json.loads(_fetch(url)))
     return _fetch_or_cached("qqq.json", fetch)
