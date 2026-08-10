@@ -4,7 +4,7 @@ from scanners.premarket import GapResult
 from scanners.hourly import Signal
 from scanners.slack import route_channel
 from scanners.config import CHANNELS
-from scanners.universe import _parse_nasdaq_screener, _parse_wikipedia_sp500
+from scanners.universe import _parse_nasdaq_screener, _parse_wikipedia_sp500, _parse_nasdaq100_api
 
 
 # ---- formatting ----------------------------------------------------------------
@@ -69,18 +69,19 @@ def test_parse_nasdaq_screener_filters_by_cap():
 
 
 def test_parse_wikipedia_sp500():
+    # Wikipedia's Parsoid renderer puts an id="mwXX" on every <td>, not a bare <td>.
     html = ('<table id="constituents"><tr><th>Symbol</th></tr>'
-            '<tr><td><a href="/x">AAPL</a></td><td>Apple</td></tr>'
-            '<tr><td><a href="/y">MSFT</a></td><td>Microsoft</td></tr>'
-            '<tr><td><a href="/z">AAPL</a></td><td>dup</td></tr></table>')
+            '<tr><td id="mw1"><a href="/x">AAPL</a></td><td id="mw2">Apple</td></tr>'
+            '<tr><td id="mw3"><a href="/y">MSFT</a></td><td id="mw4">Microsoft</td></tr>'
+            '<tr><td id="mw5"><a href="/z">AAPL</a></td><td id="mw6">dup</td></tr></table>')
     assert _parse_wikipedia_sp500(html) == ["AAPL", "MSFT"]
 
 
-def test_parse_nasdaq100_plain_td_cells():
-    # Nasdaq-100 page has the ticker in a plain (unlinked) first <td>
-    from scanners.universe import _parse_nasdaq100
-    html = ('<table id="constituents"><tr><th>Ticker</th><th>Company</th></tr>'
-            '<tr><td>ADBE</td><td><a href="/x">Adobe Inc.</a></td></tr>'
-            '<tr><td>AMD</td><td><a href="/y">AMD</a></td></tr>'
-            '<tr><td>ADBE</td><td>dup</td></tr></table>')
-    assert _parse_nasdaq100(html) == ["ADBE", "AMD"]
+def test_parse_nasdaq100_api_filters_and_dedupes():
+    payload = {"data": {"data": {"rows": [
+        {"symbol": "ADBE", "companyName": "Adobe Inc."},
+        {"symbol": "AMD", "companyName": "AMD"},
+        {"symbol": "ADBE", "companyName": "dup"},
+        {"symbol": "", "companyName": "blank"},
+    ]}}}
+    assert _parse_nasdaq100_api(payload) == ["ADBE", "AMD"]
