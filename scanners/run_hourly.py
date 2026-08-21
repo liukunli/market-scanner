@@ -56,10 +56,24 @@ def run(post_signal=slack.post_signal) -> dict:
         print(f"[skip] no live session today (latest={session}, today={today})")
         return {"skipped": True, "latest_session": session}
 
-    qqq = universe.qqq_constituents(now)
-    sp500 = universe.sp500_constituents(now)
+    try:
+        symbols = universe.us_5b_universe(now)
+    except universe.UniverseFetchError as e:
+        print(f"[error] US>$5B universe fetch failed, nothing to scan: {e}")
+        return {"skipped": True, "error": str(e)}
+
+    try:
+        qqq = universe.qqq_constituents(now)
+    except universe.UniverseFetchError as e:
+        print(f"[warn] QQQ constituent fetch failed, tier tags will be incomplete: {e}")
+        qqq = []
+    try:
+        sp500 = universe.sp500_constituents(now)
+    except universe.UniverseFetchError as e:
+        print(f"[warn] S&P 500 constituent fetch failed, tier tags will be incomplete: {e}")
+        sp500 = []
+
     # index ETFs are covered by the 30-min scan (run_index_30m); stocks only here
-    symbols = universe.us_5b_universe(now)
     bars_by = yahoo.fetch_all(symbols, yahoo.hourly_bars)
 
     # collect signals per direction, then rank + cap to control noise / rate limits
