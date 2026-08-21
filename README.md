@@ -61,6 +61,17 @@ python3 -m scanners.run_index_30m      # every 30 min  — QQQ/SPY/IWM, long+sho
 All three self-guard: if today has no live session (weekend/holiday), they skip
 and post nothing.
 
+### 0DTE / 1DTE options strategy backtesting
+
+`dte_lab/` is a separate strategy-backtest framework (iron condor first),
+using Black-Scholes-estimated option pricing — **not** real historical
+options-chain data. See `dte_lab/README.md` for the full assumptions before
+trusting any result.
+
+```bash
+python3 -m scripts.backtest_options --symbol SPY --dte 0 --lookback 2y
+```
+
 ### Index 30-min scan + option targets
 
 QQQ/SPY/IWM run on **30-minute** bars with the same 2-bar mechanism, both
