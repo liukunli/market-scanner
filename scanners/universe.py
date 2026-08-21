@@ -42,10 +42,18 @@ def _read_cache_any(name: str) -> list | None:
     return None
 
 
+class UniverseFetchError(RuntimeError):
+    """Raised when a universe list could not be fetched live and no cached
+    copy exists to fall back on. Callers must not treat this the same as a
+    genuinely empty universe."""
+
+
 def _fetch_or_cached(name: str, fetch_fn):
-    """Run fetch_fn(); on failure fall back to a stale cache, else re-raise
-    only if there is nothing usable. Keeps a scheduled run alive when a data
-    source transiently blocks the cloud IP."""
+    """Run fetch_fn(); on failure fall back to a stale cache. Keeps a
+    scheduled run alive when a data source transiently blocks the cloud IP.
+    Raises UniverseFetchError if there is nothing usable at all (e.g. a fresh
+    clone with no cache, hitting a source that's currently down/blocked) -
+    the caller must not mistake that for a real, empty universe."""
     try:
         syms = fetch_fn()
         if syms:
@@ -54,7 +62,9 @@ def _fetch_or_cached(name: str, fetch_fn):
     except Exception:
         pass
     stale = _read_cache_any(name)
-    return stale if stale is not None else []
+    if stale is not None:
+        return stale
+    raise UniverseFetchError(f"no live data and no cached fallback for {name}")
 
 
 def _write_cache(name: str, data: list) -> None:

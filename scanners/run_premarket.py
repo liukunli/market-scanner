@@ -35,23 +35,30 @@ def run() -> dict:
         print(f"[skip] no live session today (latest={session}, today={today})")
         return {"skipped": True, "latest_session": session}
 
-    qqq = set(universe.qqq_constituents(now))
-    sp500 = set(universe.sp500_constituents(now))
-    five_b = universe.us_5b_universe(now)
+    universe_fetchers = [("QQQ", CHANNELS["qqq"], universe.qqq_constituents),
+                        ("S&P 500", CHANNELS["sp500"], universe.sp500_constituents),
+                        ("US > $5B", CHANNELS["other_5b"], universe.us_5b_universe)]
+    members, fetch_errors = {}, {}
+    for label, _channel, fetch_fn in universe_fetchers:
+        try:
+            members[label] = set(fetch_fn(now))
+        except universe.UniverseFetchError as e:
+            print(f"[error] {label} universe fetch failed, skipping scan/post: {e}")
+            fetch_errors[label] = str(e)
 
     # fetch every unique symbol ONCE, then slice per universe (was 3x overlap)
-    all_syms = list(dict.fromkeys(list(qqq) + list(sp500) + list(five_b)))
+    all_syms = list(dict.fromkeys(s for ms in members.values() for s in ms))
     raw = yahoo.fetch_all(all_syms, yahoo.premarket_quote)
     quotes = {s: Quote(symbol=s, prev_close=r[0], premarket_price=r[1],
                       premarket_volume=r[2])
               for s, r in raw.items() if r}
 
-    universes = [("QQQ", CHANNELS["qqq"], qqq),
-                 ("S&P 500", CHANNELS["sp500"], sp500),
-                 ("US > $5B", CHANNELS["other_5b"], set(five_b))]
     summary = {}
-    for label, channel, members in universes:
-        qs = [quotes[s] for s in members if s in quotes]
+    for label, channel, _fetch_fn in universe_fetchers:
+        if label in fetch_errors:
+            summary[label] = {"fetch_error": fetch_errors[label]}
+            continue
+        qs = [quotes[s] for s in members[label] if s in quotes]
         ups, downs = scan(qs, PREMARKET)
         post_error = _safe_post(channel, format_premarket(label, ups, downs))
         summary[label] = {"ups": len(ups), "downs": len(downs), "post_error": post_error}
