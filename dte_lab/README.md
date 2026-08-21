@@ -13,23 +13,45 @@ Every option price is a Black-Scholes estimate. Concretely:
 - **Spot** comes from real daily OHLC (`scanners.yahoo.bars`).
 - **Implied volatility** is *not* observed — it's a proxy: trailing
   realized volatility of the underlying's own closes, scaled by a fixed
-  multiplier (`iv_rv_multiplier`, default 1.15) to approximate the
-  volatility risk premium. This is a blunt, non-regime-aware assumption —
-  it won't spike ahead of an FOMC print or an earnings gap the way real IV
-  does, and it won't capture the term-structure difference between a 0DTE
-  option's IV and 1-month IV.
+  multiplier (`iv_rv_multiplier`, default 1.25, from the historical
+  VIX-over-realized-SPX-vol premium) to approximate the volatility risk
+  premium. This is a blunt, non-regime-aware assumption — it won't spike
+  ahead of an FOMC print or an earnings gap the way real IV does, and it
+  won't capture the term-structure difference between a 0DTE option's IV
+  and 1-month IV.
+  **This one number dominates every backtest result far more than any
+  strategy parameter does** — a sweep across delta/wing-width/multiplier on
+  SPY 0DTE swung total 2-year return from -49% to +169% *purely* from
+  moving the multiplier 1.15 → 1.6, because it's assuming an edge (the
+  credit is priced off the inflated IV, settlement is priced off the real
+  historical path), not discovering one. Treat any backtest run with a
+  hand-picked multiplier as "here's what happens if this much vol premium
+  is real," not as evidence of a working strategy.
 - **Option prices** (and the delta-targeted strike selection) are pure
   Black-Scholes given that spot + IV. No bid/ask spread, no slippage, no
   commissions.
-- **Settlement is close-to-close.** A position is always held to
-  expiration and settled against the actual closing price that day — there
-  is no intraday path, so nothing is ever stopped out or closed early
-  intra-day. Real 0DTE traders typically manage risk with intraday stops;
-  this model can't represent that, which likely makes its drawdowns worse
-  and more concentrated than a stop-managed strategy would see.
+- **No real intraday path.** Only the day's Open/High/Low/Close are
+  available. An optional stop-loss (`stop_loss_multiple`, e.g. 2.0 = exit
+  at 2x the credit received) is *approximated* by checking whether the
+  structure's intrinsic-value PnL at the day's high or low would have
+  breached it, and if so capping the loss there instead of the close. This
+  can't reproduce real path dependence (a move that breaches and
+  un-breaches *between* the sampled high/low/close points isn't visible).
+  **Off by default** (`stop_loss_multiple=None`, hold to expiration):
+  tested against the default IronCondorConfig (16-delta, 5-wide) on SPY
+  0DTE, an active stop made results *worse* at every tightness tested,
+  converging back to the no-stop baseline as it loosened. The credit
+  collected on a thin, far-OTM structure is small relative to its width,
+  so a credit-multiple stop sits close to ordinary daily noise — it
+  converts positions that dip and recover by the close into locked-in
+  losses more often than it prevents real blowups. It may earn its keep on
+  a wider-credit/closer-to-the-money structure; verify with and without it
+  for any given configuration rather than assuming it helps.
 - **Position sizing** risks a fixed fraction of current equity
-  (`risk_pct_per_trade`) per trade, based on the structure's Black-Scholes
-  max loss — this is what drives the compounding equity curve.
+  (`risk_pct_per_trade`) per trade, sized against the *effective* loss
+  (the stop-loss level, when it's tighter than the structure's theoretical
+  Black-Scholes max loss) — this is what drives the compounding equity
+  curve.
 
 Read backtest output as *"what this strategy should have earned under
 Black-Scholes pricing and this vol assumption"*, not as a historical

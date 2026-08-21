@@ -1,11 +1,16 @@
 """Day-by-day backtest engine: fetch daily bars, price a strategy's structure
 at entry via Black-Scholes, settle it against the actual closing price on
-the expiration day, and compound an account equity curve.
+the expiration day (subject to an intraday stop-loss approximated from the
+day's High/Low - see `_stop_adjusted_pnl`), and compound an account equity
+curve.
 
 Simplifications (see README.md for the full list):
-  * Entry/settlement use daily Open/Close only - no intraday path, so a
-    0DTE/1DTE position is never stopped out or closed early; it's always
-    held to expiration and settled against the close.
+  * Only the day's Open/High/Low/Close are available - no intraday path, so
+    the stop-loss check is an approximation: it looks at the intrinsic-value
+    PnL implied by the day's high and low (in addition to the close) and, if
+    either would have breached the stop, caps the loss there instead of
+    riding it to the (possibly worse, or recovered) close. Real path
+    dependence (e.g. touched the stop then reversed) can't be reproduced.
   * IV is a realized-vol-based proxy (dte_lab.volatility), not a market quote.
 """
 from __future__ import annotations
@@ -43,14 +48,48 @@ class BacktestConfig:
     risk_pct_per_trade: float = 0.02  # fraction of current equity risked per trade
     rate: float = 0.045             # annualized risk-free rate used in BS pricing
     vol_window: int = 20
-    iv_rv_multiplier: float = 1.15
+    iv_rv_multiplier: float = 1.25  # see dte_lab/volatility.py - results are
+    # extremely sensitive to this number (it's assuming a vol risk premium,
+    # not discovering one from data), so treat any single value as a
+    # scenario to stress-test against, not a validated edge.
     same_day_t_fraction: float = 0.30  # remaining fraction of the entry day's
     # session at trade-open, expressed as a fraction of one trading day (e.g.
     # entering mid-morning on a 0DTE leaves ~30% of the day's time value left)
+    stop_loss_multiple: float | None = None  # exit if paper loss reaches this
+    # many multiples of the credit received (e.g. 2.0 means "close if you're
+    # down 2x the premium you collected"). Off by default: empirically, on a
+    # thin-credit far-OTM condor (the default IronCondorConfig), an active
+    # stop converts winners that dip and recover into locked-in losses more
+    # often than it saves real blowups - it made SPY 0DTE backtests *worse*
+    # at every tested tightness. Worth enabling for wider-credit/closer-to-
+    # the-money structures where the stop threshold sits further from
+    # ordinary daily noise; run with and without --stop-loss-multiple set to
+    # compare before trusting either for a given configuration.
 
 
 def _settlement_index(entry_idx: int, dte: int) -> int:
     return entry_idx + dte
+
+
+def _stop_adjusted_pnl(setup: TradeSetup, low: float, high: float, close: float,
+                       stop_loss_multiple: float | None) -> float:
+    """PnL per share at settlement, capped by an intraday stop-loss.
+
+    Evaluates the structure's intrinsic-value PnL at the day's low, high, and
+    close; if the worst of those breaches `stop_loss_multiple * credit`, the
+    position is treated as closed at the stop rather than at the close (it
+    can't do worse than the stop, and doesn't get to keep any later
+    recovery). Works for any TradeSetup, not just iron condors.
+    """
+    if stop_loss_multiple is None:
+        return setup.settlement_pnl_per_share(close)
+    stop_floor = -stop_loss_multiple * setup.credit_per_share
+    worst = min(setup.settlement_pnl_per_share(low),
+               setup.settlement_pnl_per_share(high),
+               setup.settlement_pnl_per_share(close))
+    if worst <= stop_floor:
+        return max(worst, stop_floor)
+    return setup.settlement_pnl_per_share(close)
 
 
 def run(bars: Sequence[Bar], config: BacktestConfig) -> list[DayResult]:
@@ -81,15 +120,23 @@ def run(bars: Sequence[Bar], config: BacktestConfig) -> list[DayResult]:
                                      iv, None, 0, 0.0, equity_before, equity_before))
             continue
 
+        # Size against the loss a stop-loss discipline actually realizes, not
+        # the theoretical worst case the stop exists to prevent.
+        effective_loss_per_share = setup.max_loss_per_share
+        if config.stop_loss_multiple is not None:
+            effective_loss_per_share = min(
+                effective_loss_per_share, config.stop_loss_multiple * setup.credit_per_share)
+
         risk_dollars = equity * config.risk_pct_per_trade
-        max_loss_per_contract = setup.max_loss_per_share * CONTRACT_MULTIPLIER
+        max_loss_per_contract = effective_loss_per_share * CONTRACT_MULTIPLIER
         contracts = int(risk_dollars // max_loss_per_contract)
         if contracts < 1 or max_loss_per_contract > equity:
             results.append(DayResult(local_date(entry_bar.ts), entry_bar.open, settle_bar.close,
                                      iv, setup, 0, 0.0, equity_before, equity_before))
             continue
 
-        pnl_per_share = setup.settlement_pnl_per_share(settle_bar.close)
+        pnl_per_share = _stop_adjusted_pnl(setup, settle_bar.low, settle_bar.high,
+                                          settle_bar.close, config.stop_loss_multiple)
         pnl = pnl_per_share * CONTRACT_MULTIPLIER * contracts
         equity += pnl
         results.append(DayResult(local_date(entry_bar.ts), entry_bar.open, settle_bar.close,

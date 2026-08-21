@@ -5,7 +5,7 @@ import pytest
 
 from dte_lab import blackscholes as bs
 from dte_lab import volatility as vol
-from dte_lab.engine import BacktestConfig, DayResult, run
+from dte_lab.engine import BacktestConfig, DayResult, run, _stop_adjusted_pnl
 from dte_lab.metrics import equity_curve, max_drawdown, summarize
 from dte_lab.strategy import IronCondorConfig, IronCondorStrategy, Leg, TradeSetup
 from scanners.hourly import Bar
@@ -120,7 +120,63 @@ def test_trade_setup_settlement_pnl_max_loss_beyond_long_strike():
     assert setup.settlement_pnl_per_share(520.0) == pytest.approx(2.0 - 5.0)
 
 
-# ---- engine -------------------------------------------------------------------
+# ---- engine: stop-loss ---------------------------------------------------------
+
+def _condor_setup(credit=2.0, max_loss=3.0):
+    legs = (
+        Leg("call", 505, "short"), Leg("call", 510, "long"),
+        Leg("put", 495, "short"), Leg("put", 490, "long"),
+    )
+    return TradeSetup(legs=legs, credit_per_share=credit, max_loss_per_share=max_loss)
+
+
+def test_stop_adjusted_pnl_no_breach_settles_at_close():
+    setup = _condor_setup()
+    # low/high stay inside the short strikes the whole day -> no stop, settle at close
+    pnl = _stop_adjusted_pnl(setup, low=498.0, high=502.0, close=500.0, stop_loss_multiple=2.0)
+    assert pnl == pytest.approx(setup.settlement_pnl_per_share(500.0))
+
+
+def test_stop_adjusted_pnl_caps_loss_at_stop_even_if_close_recovers():
+    setup = _condor_setup(credit=2.0, max_loss=3.0)
+    # day's low blows past the long put strike (full max loss, -3.0), but price
+    # recovers by the close -> a real stop-loss trader (1x credit here, tighter
+    # than the 3.0 max loss) was already out and missed the recovery, so pnl
+    # must be capped at -stop_multiple*credit, not the close.
+    pnl = _stop_adjusted_pnl(setup, low=489.0, high=500.5, close=500.0, stop_loss_multiple=1.0)
+    assert pnl == pytest.approx(-1.0 * setup.credit_per_share)
+    assert pnl > -setup.max_loss_per_share  # stop is tighter than the theoretical max loss
+
+
+def test_stop_adjusted_pnl_none_disables_stop():
+    setup = _condor_setup(credit=2.0, max_loss=3.0)
+    pnl = _stop_adjusted_pnl(setup, low=489.0, high=500.5, close=489.0, stop_loss_multiple=None)
+    # no stop -> full close-based settlement, i.e. max loss
+    assert pnl == pytest.approx(-setup.max_loss_per_share)
+
+
+def test_stop_loss_sizes_up_positions_vs_no_stop():
+    """A tighter effective risk (stop) should let the engine afford more
+    contracts than sizing against the full theoretical max loss."""
+    bars = []
+    day0_ts = 1_700_000_000
+    for i in range(30):
+        price = 500.0 + (1.0 if i % 2 == 0 else -1.0)
+        ts = day0_ts + i * 86400
+        bars.append(Bar(ts=ts, open=500.0, high=price, low=price, close=price, volume=1000))
+    strat = IronCondorStrategy(IronCondorConfig(short_delta=0.16, wing_width=10.0,
+                                                 min_credit_frac_of_width=0.0))
+    with_stop = BacktestConfig(strategy=strat, dte=0, starting_capital=100_000,
+                               risk_pct_per_trade=0.02, vol_window=5, stop_loss_multiple=0.5)
+    without_stop = BacktestConfig(strategy=strat, dte=0, starting_capital=100_000,
+                                  risk_pct_per_trade=0.02, vol_window=5, stop_loss_multiple=None)
+    contracts_with = [r.contracts for r in run(bars, with_stop) if r.contracts > 0]
+    contracts_without = [r.contracts for r in run(bars, without_stop) if r.contracts > 0]
+    assert contracts_with and contracts_without
+    assert min(contracts_with) > min(contracts_without)
+
+
+# ---- engine ---------------------------------------------------------------------
 
 def _flat_bars(n: int, price: float = 500.0, day0_ts: int = 1_700_000_000) -> list[Bar]:
     """n daily bars, dead flat (zero realized vol) except for a deliberate jump

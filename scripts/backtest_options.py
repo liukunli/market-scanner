@@ -26,7 +26,13 @@ def main() -> None:
     ap.add_argument("--risk-pct", type=float, default=0.02, help="fraction of equity risked per trade")
     ap.add_argument("--short-delta", type=float, default=0.16)
     ap.add_argument("--wing-width", type=float, default=5.0)
-    ap.add_argument("--iv-rv-multiplier", type=float, default=1.15)
+    ap.add_argument("--iv-rv-multiplier", type=float, default=1.25,
+                    help="assumed IV-over-realized-vol premium (results are extremely "
+                         "sensitive to this - see dte_lab/README.md)")
+    ap.add_argument("--stop-loss-multiple", type=float, default=None,
+                    help="exit if paper loss reaches this many multiples of credit received "
+                         "(off by default - empirically hurts thin-credit far-OTM condors via "
+                         "whipsaw; compare with/without before enabling)")
     ap.add_argument("--out", default=None, help="chart PNG path (default: {symbol}_{dte}dte.png)")
     args = ap.parse_args()
 
@@ -38,7 +44,8 @@ def main() -> None:
         short_delta=args.short_delta, wing_width=args.wing_width))
     config = BacktestConfig(
         strategy=strategy, dte=args.dte, starting_capital=args.capital,
-        risk_pct_per_trade=args.risk_pct, iv_rv_multiplier=args.iv_rv_multiplier)
+        risk_pct_per_trade=args.risk_pct, iv_rv_multiplier=args.iv_rv_multiplier,
+        stop_loss_multiple=args.stop_loss_multiple)
 
     results = run(bars, config)
     summary = summarize(results)
