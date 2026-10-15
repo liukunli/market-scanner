@@ -2,7 +2,7 @@
 
 Preferred: Resend HTTPS API (works through Claude's cloud sandbox proxy).
     RESEND_API_KEY   Resend API key (starts with "re_")
-    REPORT_TO        recipient (default: liukunli@msu.edu)
+    REPORT_TO        recipient (default: liukunli1996@gmail.com)
     REPORT_FROM      sender (default: "Market Scanner <onboarding@resend.dev>",
                      which Resend allows for sending to your own signup email)
 
@@ -25,7 +25,7 @@ import urllib.parse
 import urllib.request
 from email.message import EmailMessage
 
-DEFAULT_TO = "liukunli@msu.edu"
+DEFAULT_TO = "liukunli1996@gmail.com"
 DEFAULT_FROM = "Market Scanner <onboarding@resend.dev>"
 
 
