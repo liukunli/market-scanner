@@ -1,30 +1,58 @@
-"""Send the pre-market report by email via Gmail SMTP.
+"""Send the pre-market report by email.
 
-Credentials come from env vars (never commit them):
-    GMAIL_USER          sender Gmail address, e.g. liukunli001@gmail.com
-    GMAIL_APP_PASSWORD  a Google "app password" (16 chars) for that account
-    REPORT_TO           recipient (default: liukunli@msu.edu)
+Preferred: Resend HTTPS API (works through Claude's cloud sandbox proxy).
+    RESEND_API_KEY   Resend API key (starts with "re_")
+    REPORT_TO        recipient (default: liukunli@msu.edu)
+    REPORT_FROM      sender (default: "Market Scanner <onboarding@resend.dev>",
+                     which Resend allows for sending to your own signup email)
 
-If HTTPS_PROXY is set (as in Claude's cloud sandbox), the SMTP connection is
-tunnelled through it with an HTTP CONNECT, since direct egress is blocked there.
+Fallback: Gmail SMTP, used only if RESEND_API_KEY is not set.
+    GMAIL_USER, GMAIL_APP_PASSWORD
 
 Usage:
     python3 -m scanners.email_report premarket_report.txt
 """
 from __future__ import annotations
 
+import json
 import os
 import smtplib
 import socket
 import ssl
 import sys
+import urllib.error
 import urllib.parse
+import urllib.request
 from email.message import EmailMessage
 
-SMTP_HOST, SMTP_PORT = "smtp.gmail.com", 465
 DEFAULT_TO = "liukunli@msu.edu"
+DEFAULT_FROM = "Market Scanner <onboarding@resend.dev>"
 
 
+# --- Resend ---------------------------------------------------------------------
+def _send_resend(api_key: str, subject: str, body: str, to: str) -> str:
+    payload = json.dumps({
+        "from": os.environ.get("REPORT_FROM") or DEFAULT_FROM,
+        "to": [to],
+        "subject": subject,
+        "text": body,
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.resend.com/emails", data=payload, method="POST",
+        headers={"Authorization": f"Bearer {api_key}",
+                 "Content-Type": "application/json",
+                 "User-Agent": "market-scanner/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode() or "{}")
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Resend send failed: HTTP {e.code} {e.read().decode(errors='replace')}")
+    if not result.get("id"):
+        raise RuntimeError(f"Resend send failed: {result}")
+    return result["id"]
+
+
+# --- Gmail SMTP fallback (tunnels through HTTPS_PROXY when set) ----------------
 def _tunnel(host: str, port: int, timeout: float) -> socket.socket:
     proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
     if not proxy:
@@ -47,31 +75,34 @@ def _tunnel(host: str, port: int, timeout: float) -> socket.socket:
 
 class _ProxiedSMTPSSL(smtplib.SMTP_SSL):
     def _get_socket(self, host, port, timeout):
-        raw = _tunnel(host, port, timeout)
-        return self.context.wrap_socket(raw, server_hostname=host)
+        return self.context.wrap_socket(_tunnel(host, port, timeout), server_hostname=host)
 
 
-def send(subject: str, body: str, to: str | None = None) -> None:
-    user = os.environ.get("GMAIL_USER")
-    password = os.environ.get("GMAIL_APP_PASSWORD")
-    if not user or not password:
-        raise RuntimeError("GMAIL_USER / GMAIL_APP_PASSWORD not set")
-    to = to or os.environ.get("REPORT_TO") or DEFAULT_TO
-
+def _send_gmail(user: str, password: str, subject: str, body: str, to: str) -> str:
     msg = EmailMessage()
     msg["From"], msg["To"], msg["Subject"] = user, to, subject
     msg.set_content(body)
-
-    ctx = ssl.create_default_context()
-    with _ProxiedSMTPSSL(SMTP_HOST, SMTP_PORT, context=ctx, timeout=30) as smtp:
+    with _ProxiedSMTPSSL("smtp.gmail.com", 465, context=ssl.create_default_context(),
+                         timeout=30) as smtp:
         smtp.login(user, password.replace(" ", ""))
         smtp.send_message(msg)
+    return "gmail"
+
+
+def send(subject: str, body: str, to: str | None = None) -> str:
+    to = to or os.environ.get("REPORT_TO") or DEFAULT_TO
+    key = os.environ.get("RESEND_API_KEY")
+    if key:
+        return _send_resend(key, subject, body, to)
+    user, pw = os.environ.get("GMAIL_USER"), os.environ.get("GMAIL_APP_PASSWORD")
+    if user and pw:
+        return _send_gmail(user, pw, subject, body, to)
+    raise RuntimeError("No email credentials: set RESEND_API_KEY (or GMAIL_USER + GMAIL_APP_PASSWORD)")
 
 
 if __name__ == "__main__":
     path = sys.argv[1] if len(sys.argv) > 1 else "premarket_report.txt"
     with open(path) as fh:
         body = fh.read()
-    first = body.splitlines()[0] if body else "Pre-market gappers"
-    send(first, body)
-    print(f"sent: {first}")
+    subject = body.splitlines()[0] if body else "Pre-market gappers"
+    print(f"sent ({send(subject, body)}): {subject}")
